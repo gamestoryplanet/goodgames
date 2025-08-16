@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>탱크 배틀 · 10단계</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121a33;--muted:#9bb3d1;--text:#e9f1ff;}
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif}
+    .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+      background:#0e1630;border-bottom:1px solid rgba(255,255,255,.08);padding:8px 12px}
+    .bar .pill{background:#1b254d;color:#e9f1ff;border-radius:12px;padding:6px 10px;font-size:14px}
+    .bar button{background:#2a376f;color:#fff;border:0;border-radius:12px;padding:8px 12px;font-weight:700}
+    .wrap{display:flex;flex-direction:column;height:100%}
+    #game{flex:1;display:flex;align-items:center;justify-content:center;position:relative}
+    canvas{background:#080d1d;border:1px solid rgba(255,255,255,.08);border-radius:12px;touch-action:none}
+    .help{position:absolute;left:12px;bottom:12px;background:rgba(0,0,0,.45);
+      color:#cfe3ff;padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5;max-width:min(92vw,560px)}
+    .stick{position:absolute;left:16px;bottom:16px;width:110px;height:110px;border-radius:50%;
+      border:2px solid rgba(255,255,255,.15);touch-action:none;display:none}
+    .stick .knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;
+      background:rgba(255,255,255,.18)}
+    @media (pointer:coarse){ .stick{display:block} .help{font-size:12px} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bar">
+      <span class="pill">레벨 <span id="lvl">1</span>/10</span>
+      <span class="pill">남은시간 <span id="time">45</span>s</span>
+      <span class="pill">HP <span id="hp">120</span></span>
+      <span class="pill">처치 <span id="kills">0</span></span>
+      <label class="pill" style="display:flex;align-items:center;gap:6px;">
+        <input id="autofire" type="checkbox" checked /> 오토 포격
+      </label>
+      <button id="btnStart">시작/재개</button>
+      <button id="btnPause">일시정지</button>
+      <button id="btnRestart">다시 시작</button>
+    </div>
+    <div id="game">
+      <canvas id="cv" width="900" height="600"></canvas>
+      <div class="stick" id="stick"><div class="knob"></div></div>
+      <div class="help">
+        <b>조작</b><br>
+        PC: A/D 회전, W/S 전/후진, 마우스로 조준(클릭 발사/오토 포격).<br>
+        모바일: 좌하단 조이스틱으로 이동·회전, 오토 포격 ON 권장.<br>
+        <b>목표</b>: 각 레벨 45초 생존 & 적 탱크 처치. 적 포탄/충돌에 주의!
+      </div>
+    </div>
+  </div>
+
+  <script src="./game.js"></script>
+</body>
+</html>
