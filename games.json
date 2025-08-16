@@ -22,5 +22,11 @@
     "title": "탱크 배틀 · 10단계",
     "desc": "A/D 회전, W/S 전후진, 클릭/오토 포격",
     "url": "tank-battle/"
+  },
+  {
+    "id": "galaxy-shooter",
+    "title": "갤럭시 슈터 · 10단계",
+    "desc": "좌/우 이동, 클릭/오토 발사 — 편대 제거!",
+    "url": "galaxy-shooter/"
   }
 ]
