@@ -29,29 +29,55 @@
   </div>
 
 <script>
-(async function(){
+async function loadList(){
   try{
     const res = await fetch('./games.json', {cache:'no-store'});
     const games = await res.json();
-    const grid = document.getElementById('grid');
+    const wrap = document.getElementById('list');
+    wrap.innerHTML = '';
+
+    // 항상 "절대 URL"을 만들어주는 함수
+    const base = location.origin + location.pathname.replace(/\/?$/, '/');
+    const toAbs = (u) => new URL(u || '', base).href;
 
     games.forEach(g=>{
-      const url = g.url || (g.id + '/');
-      const a = document.createElement('a');
-      a.className = 'card';
-      a.href = url;           // ← 카드 클릭 시 곧바로 게임으로 이동
-      a.innerHTML = `
-        <h3 class="title">${g.title || g.id}</h3>
-        <p class="desc">${g.desc || ''}</p>
-        <span class="badge">바로 실행</span>
+      // 카드에 쓸 URL은 무조건 절대경로
+      const url = toAbs(g.url || (g.id + '/'));
+      const repo = `https://github.com/gamestoryplanet/goodgames/tree/main/${g.id}`;
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3 style="margin:0 0 8px">${g.title || g.id}</h3>
+        <p class="muted" style="margin:0 0 10px">${g.desc || ''}</p>
+
+        <!-- 여기 표시되는 URL이 이제 항상 전체 주소 -->
+        <p class="muted" style="margin:0 0 10px">
+          이 게임의 URL: <code>${url}</code>
+          <button onclick="navigator.clipboard.writeText('${url}')">복사</button>
+        </p>
+
+        <p style="margin:0 0 10px">
+          <a class="btn" href="${url}" target="_blank">전체 화면으로 플레이</a>
+          <a class="btn" href="${repo}" target="_blank">소스 보기</a>
+        </p>
+
+        <p class="muted" style="margin:6px 0 4px"><b>퍼가기(HTML)</b></p>
+        <textarea readonly>&lt;div style="position:relative;padding-top:66.6667%;width:100%;max-width:800px;margin:auto;"&gt;
+  &lt;iframe src="${url}" title="${g.title || g.id}"
+          style="position:absolute;inset:0;border:0;width:100%;height:100%;border-radius:16px;overflow:hidden;"
+          loading="lazy" allowfullscreen&gt;&lt;/iframe&gt;
+&lt;/div&gt;</textarea>
       `;
-      grid.appendChild(a);
+      wrap.appendChild(card);
     });
-  }catch(e){
-    document.getElementById('grid').innerHTML =
-      '<p>games.json을 불러오지 못했습니다. 파일이 루트에 있는지/문법 오류가 없는지 확인하세요.</p>';
+  } catch (e) {
+    document.getElementById('list').textContent =
+      'games.json을 불러오지 못했습니다. 파일 위치/문법을 확인하세요.';
   }
-})();
+}
+loadList();
 </script>
+
 </body>
 </html>
