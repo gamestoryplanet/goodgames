@@ -16,5 +16,11 @@
     "title": "버블 팝 · 10단계",
     "desc": "목표 색상만 터뜨리기! 오입력 시 페널티",
     "url": "bubble-pop/"
-  }
+  },
+  {
+  "id": "tank-battle",
+  "title": "탱크 배틀 · 10단계",
+  "desc": "A/D 회전, W/S 전후진, 클릭/오토 포격",
+  "url": "tank-battle/"
+}
 ]
