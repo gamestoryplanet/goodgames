@@ -10,5 +10,11 @@
     "title": "서바이벌 슈터 · 10단계",
     "desc": "좀비를 피해 45초 생존! 오토 발사 지원",
     "url": "survival-shooter/"
+  },
+  {
+    "id": "bubble-pop",
+    "title": "버블 팝 · 10단계",
+    "desc": "목표 색상만 터뜨리기! 오입력 시 페널티",
+    "url": "bubble-pop/"
   }
 ]
