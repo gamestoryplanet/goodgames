@@ -4,5 +4,11 @@
     "title": "벽돌깨기 · 쉬움(3/10)",
     "desc": "시니어 친화 기본 난이도",
     "url": "brick-breaker/"
+  },
+  {
+    "id": "survival-shooter",
+    "title": "서바이벌 슈터 · 10단계",
+    "desc": "좀비를 피해 45초 생존! 오토 발사 지원",
+    "url": "survival-shooter/"
   }
 ]
