@@ -27,57 +27,56 @@
     <h1>게임 목록</h1>
     <div id="grid" class="grid"></div>
   </div>
-
 <script>
-async function loadList(){
+(async function(){
   try{
     const res = await fetch('./games.json', {cache:'no-store'});
     const games = await res.json();
-    const wrap = document.getElementById('list');
-    wrap.innerHTML = '';
+    const grid = document.getElementById('grid');
 
-    // 항상 "절대 URL"을 만들어주는 함수
+    // 항상 절대 URL로 변환
     const base = location.origin + location.pathname.replace(/\/?$/, '/');
     const toAbs = (u) => new URL(u || '', base).href;
 
     games.forEach(g=>{
-      // 카드에 쓸 URL은 무조건 절대경로
       const url = toAbs(g.url || (g.id + '/'));
-      const repo = `https://github.com/gamestoryplanet/goodgames/tree/main/${g.id}`;
 
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
-        <h3 style="margin:0 0 8px">${g.title || g.id}</h3>
-        <p class="muted" style="margin:0 0 10px">${g.desc || ''}</p>
-
-        <!-- 여기 표시되는 URL이 이제 항상 전체 주소 -->
-        <p class="muted" style="margin:0 0 10px">
-          이 게임의 URL: <code>${url}</code>
-          <button onclick="navigator.clipboard.writeText('${url}')">복사</button>
-        </p>
-
-        <p style="margin:0 0 10px">
-          <a class="btn" href="${url}" target="_blank">전체 화면으로 플레이</a>
-          <a class="btn" href="${repo}" target="_blank">소스 보기</a>
-        </p>
-
-        <p class="muted" style="margin:6px 0 4px"><b>퍼가기(HTML)</b></p>
-        <textarea readonly>&lt;div style="position:relative;padding-top:66.6667%;width:100%;max-width:800px;margin:auto;"&gt;
-  &lt;iframe src="${url}" title="${g.title || g.id}"
-          style="position:absolute;inset:0;border:0;width:100%;height:100%;border-radius:16px;overflow:hidden;"
-          loading="lazy" allowfullscreen&gt;&lt;/iframe&gt;
-&lt;/div&gt;</textarea>
+        <h3 class="title">${g.title || g.id}</h3>
+        <p class="desc">${g.desc || ''}</p>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+          <a class="badge" href="${url}" target="_blank">바로 실행</a>
+          <button class="badge" type="button" data-url="${url}">URL 복사</button>
+          <span class="desc copy-done" style="display:none;">복사됨!</span>
+        </div>
       `;
-      wrap.appendChild(card);
+      grid.appendChild(card);
     });
-  } catch (e) {
-    document.getElementById('list').textContent =
-      'games.json을 불러오지 못했습니다. 파일 위치/문법을 확인하세요.';
+
+    // 복사 버튼 이벤트 (카드가 만들어진 뒤 연결)
+    grid.addEventListener('click', async (e)=>{
+      const btn = e.target.closest('button[data-url]');
+      if (!btn) return;
+      try{
+        await navigator.clipboard.writeText(btn.dataset.url);
+        const done = btn.parentElement.querySelector('.copy-done');
+        if (done){
+          done.style.display = 'inline';
+          setTimeout(()=> done.style.display = 'none', 1200);
+        }
+      }catch(err){
+        alert('복사에 실패했습니다. 수동으로 복사해주세요:\n' + btn.dataset.url);
+      }
+    });
+  }catch(e){
+    document.getElementById('grid').innerHTML =
+      '<p>games.json을 불러오지 못했습니다. 파일 위치/문법을 확인하세요.</p>';
   }
-}
-loadList();
+})();
 </script>
+
 
 </body>
 </html>
