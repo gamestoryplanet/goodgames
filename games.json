@@ -18,9 +18,9 @@
     "url": "bubble-pop/"
   },
   {
-  "id": "tank-battle",
-  "title": "탱크 배틀 · 10단계",
-  "desc": "A/D 회전, W/S 전후진, 클릭/오토 포격",
-  "url": "tank-battle/"
-}
+    "id": "tank-battle",
+    "title": "탱크 배틀 · 10단계",
+    "desc": "A/D 회전, W/S 전후진, 클릭/오토 포격",
+    "url": "tank-battle/"
+  }
 ]
