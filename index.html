@@ -2,50 +2,55 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Games · 퍼가기 허브</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>게임 퍼가기 허브</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;margin:0;background:#0b1020;color:#e9f1ff}
     .wrap{max-width:1000px;margin:auto;padding:24px}
     h1{margin:8px 0 16px}
-    .card{background:#121a33;border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.35);padding:16px 18px;margin-bottom:16px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
-    .tile{background:#0e1630;border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px}
-    .embedbox textarea{width:100%;height:140px}
-    a.btn{display:inline-block;padding:10px 14px;background:#1b254d;border-radius:12px;color:#e9f1ff;text-decoration:none;margin-right:8px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+    .card{background:#121a33;border:1px solid rgba(255,255,255,.08);border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.35);padding:16px}
+    .btn{display:inline-block;margin:6px 8px 0 0;padding:10px 14px;border-radius:12px;background:#1b254d;color:#e9f1ff;text-decoration:none}
+    .small{font-size:12px;color:#9bb3d1}
+    textarea{width:100%;height:140px}
   </style>
   <script defer src="./embed.js"></script>
 </head>
 <body>
   <div class="wrap">
     <h1>게임 퍼가기 허브</h1>
+
     <div class="grid">
-      <div class="tile">
+      <!-- ▼ 벽돌깨기 카드 (brick-breaker 폴더 링크) -->
+      <div class="card">
         <h3>벽돌깨기 · 쉬움(3/10)</h3>
-        <div class="game-embed" data-src="./brick-breaker/" data-title="벽돌깨기" data-ratio="0.6667"></div>
+        <!-- 미리보기 위젯 -->
+        <div class="game-embed" data-src="https://gamestoryplanet.github.io/goodgames/brick-breaker/" data-title="벽돌깨기" data-ratio="0.6667"></div>
+
         <p>
-          <a class="btn" href="./brick-breaker/" target="_blank">전체 화면으로 플레이</a>
-          <a class="btn" href="https://github.com/your-id/your-repo/releases" target="_blank">ZIP 다운로드</a>
+          <a class="btn" href="https://gamestoryplanet.github.io/goodgames/brick-breaker/" target="_blank">전체 화면으로 플레이</a>
+          <a class="btn" href="https://github.com/gamestoryplanet/goodgames/tree/main/brick-breaker" target="_blank">소스 보기</a>
         </p>
-        <div class="embedbox">
-          <p><b>퍼가기(복사 → 본문 HTML에 붙여넣기)</b></p>
-          <textarea readonly>
+
+        <p class="small"><b>퍼가기(복사 → 본문 HTML에 붙여넣기)</b></p>
+        <textarea readonly>
 <div style="position:relative;padding-top:66.6667%;width:100%;max-width:800px;margin:auto;">
   <iframe
-    src="https://your-id.github.io/your-repo/brick-breaker/"
+    src="https://gamestoryplanet.github.io/goodgames/brick-breaker/"
     title="벽돌깨기(쉬움)"
     style="position:absolute;inset:0;border:0;width:100%;height:100%;border-radius:16px;overflow:hidden;"
     loading="lazy" allowfullscreen>
   </iframe>
 </div>
-          </textarea>
-          <p>또는 1줄 위젯 방식:</p>
-          <textarea readonly>
-<div class="game-embed" data-src="https://your-id.github.io/your-repo/brick-breaker/" data-title="벽돌깨기" data-ratio="0.6667"></div>
-<script src="https://your-id.github.io/your-repo/embed.js" defer></script>
-          </textarea>
-        </div>
+        </textarea>
+
+        <p class="small">또는 1줄 위젯 방식:</p>
+        <textarea readonly>
+<div class="game-embed" data-src="https://gamestoryplanet.github.io/goodgames/brick-breaker/" data-title="벽돌깨기" data-ratio="0.6667"></div>
+<script src="https://gamestoryplanet.github.io/goodgames/embed.js" defer></script>
+        </textarea>
       </div>
+      <!-- ▲ 여기처럼 게임 카드가 1개 들어간 상태입니다. 새 게임이 생기면 이 블록을 복사해 경로만 바꾸세요. -->
     </div>
   </div>
 </body>
