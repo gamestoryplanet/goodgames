@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>갤럭시 슈터 · 10단계</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121a33;--muted:#9bb3d1;--text:#e9f1ff;}
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif}
+    .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+      background:#0e1630;border-bottom:1px solid rgba(255,255,255,.08);padding:8px 12px}
+    .bar .pill{background:#1b254d;color:#e9f1ff;border-radius:12px;padding:6px 10px;font-size:14px}
+    .bar button{background:#2a376f;color:#fff;border:0;border-radius:12px;padding:8px 12px;font-weight:700}
+    .wrap{display:flex;flex-direction:column;height:100%}
+    #game{flex:1;display:flex;align-items:center;justify-content:center;position:relative;padding:8px}
+    canvas{background:linear-gradient(#030614,#0a0f20);border:1px solid rgba(255,255,255,.08);border-radius:12px;touch-action:none;
+      width:min(100%, 920px); height:auto; aspect-ratio: 3/2}
+    .help{position:absolute;left:12px;bottom:12px;background:rgba(0,0,0,.45);
+      color:#cfe3ff;padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5;max-width:min(92vw,560px)}
+    .hud{position:absolute;right:12px;bottom:12px;display:flex;gap:8px}
+    .btn{background:#1b254d;color:#e9f1ff;border:1px solid rgba(255,255,255,.08);
+      padding:12px 14px;border-radius:14px;min-width:68px;text-align:center;font-weight:700}
+    @media (pointer:coarse){ .hud{display:flex} }
+    @media (pointer:fine){ .hud{display:none} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bar">
+      <span class="pill">레벨 <span id="lvl">1</span>/10</span>
+      <span class="pill">목숨 <span id="lives">3</span></span>
+      <span class="pill">점수 <span id="score">0</span></span>
+      <label class="pill" style="display:flex;align-items:center;gap:6px;">
+        <input id="autofire" type="checkbox" checked /> 오토 발사
+      </label>
+      <button id="btnStart">시작/재개</button>
+      <button id="btnPause">일시정지</button>
+      <button id="btnRestart">다시 시작</button>
+    </div>
+    <div id="game">
+      <canvas id="cv" width="900" height="600"></canvas>
+      <div class="help">
+        <b>조작</b><br>
+        PC: 좌/우 이동(← → 또는 A/D), 스페이스/마우스 클릭 발사(오토 발사 가능)<br>
+        모바일: 화면 우하단 버튼 좌/우/발사<br>
+        <b>목표</b>: 적 편대를 제거하고 10단계까지 진행하세요. 적의 돌진과 탄을 피하세요!
+      </div>
+      <div class="hud">
+        <button class="btn" id="btnLeft">◀︎</button>
+        <button class="btn" id="btnFire">●</button>
+        <button class="btn" id="btnRight">▶︎</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./game.js"></script>
+</body>
+</html>
