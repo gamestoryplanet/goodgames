@@ -3,33 +3,49 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Brick Breaker</title>
-
-  <!-- ✅ 공용 스타일 -->
-  <link rel="stylesheet" href="../shared/style.css">
-
-  <!-- ✅ PWA 유지 -->
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0b1020">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Brick Breaker (with Homing Missiles)</title>
+  <link rel="stylesheet" href="../shared/style.css?v=1">
 </head>
 <body>
   <div id="root"></div>
 
   <script type="module">
-    import {attachUI} from "../shared/ui.js";
-    import {fitHiDPI, clamp, shaker, rint} from "../shared/utils.js";
-    import {SFX} from "../shared/sfx.js";
-    import {burst, updateAndDraw as drawParticles} from "../shared/particles.js";
+    import {attachUI} from "../shared/ui.js?v=1";
+    import {fitHiDPI, clamp, shaker, rint} from "../shared/utils.js?v=1";
+    import {SFX} from "../shared/sfx.js?v=1";
+    import {burst, updateAndDraw as drawParticles} from "../shared/particles.js?v=1";
 
-    // 1) 공용 UI 세팅
+    // 1) 공용 UI
     const ui = attachUI(document.getElementById("root"), {
       title:"Brick Breaker",
-      instructions:"마우스/터치로 패들을 움직여 공을 튕겨 벽돌을 모두 제거하세요! (P=일시정지, R=재시작)"
+      instructions:"마우스/터치로 패들을 움직이세요. F키 또는 클릭으로 유도 미사일 발사! (P=일시정지, R=재시작)"
     });
     const {canvas} = ui;
     const g = fitHiDPI(canvas, 1600, 900);
     const ctx = g.ctx;
+
+    // === Speed control (1~5) ==================================================
+    const SPEED_MAP = {1:0.65, 2:0.85, 3:1.00, 4:1.20, 5:1.45};
+    let speedLevel = +(localStorage.getItem("gg-speed") || 3);
+    let speedScale = SPEED_MAP[speedLevel] || 1;
+
+    const panel = document.createElement("div");
+    panel.style.cssText = "position:absolute; left:12px; bottom:12px; display:flex; gap:8px; align-items:center; background:rgba(0,0,0,.35); border:1px solid #2a2f5e; border-radius:999px; padding:6px 10px; backdrop-filter:blur(6px);";
+    panel.innerHTML = \`
+      <span class="small" style="color:#97a0d9">Speed</span>
+      <select id="gg-speed" class="ui" style="padding:4px 8px; background:#11162f; border:1px solid #2a2f5e; color:#e9ecff; border-radius:8px">
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+        <option value="4">4</option><option value="5">5</option>
+      </select>
+    \`;
+    panel.querySelector("#gg-speed").value = String(speedLevel);
+    panel.querySelector("#gg-speed").onchange = (e)=>{
+      speedLevel = +e.target.value;
+      speedScale = SPEED_MAP[speedLevel] || 1;
+      localStorage.setItem("gg-speed", String(speedLevel));
+    };
+    ui.canvas.parentElement.appendChild(panel);
+    // ==========================================================================
 
     // 2) 상태
     let running=false, paused=false, score=0, lives=3;
@@ -37,6 +53,10 @@
     const paddle={x:g.w/2, y:g.h-40, w:200, h:18, target:g.w/2};
     const ball={x:g.w/2, y:g.h-80, vx:4, vy:-6, r:10, speed:8};
     let bricks=[], cols=12, rows=7, margin=12;
+
+    // 미사일
+    const missiles=[];
+    const MISSILE = { speed: 12, turn: 0.14, r: 8, life: 4000 };
 
     function resetLevel(){
       bricks=[];
@@ -52,26 +72,51 @@
     }
     function restart(){
       score=0; ui.setScore(0,"brick-breaker");
-      lives=3; rows=7; resetLevel(); resetBall();
+      lives=3; rows=7; bricks.length=0; missiles.length=0; particles.length=0;
+      resetLevel(); resetBall();
       running=true; paused=false;
     }
     ui.wireHandlers(()=>{ if(!running) restart(); }, ()=>{ paused=!paused; }, ()=>restart());
 
-    // 3) 입력(터치/마우스)
+    // 입력
     canvas.addEventListener("pointermove", e=>{
       const r = canvas.getBoundingClientRect();
       const px = (e.clientX - r.left)/r.width * g.w;
       paddle.target = clamp(px, paddle.w/2, g.w - paddle.w/2);
     });
+    canvas.addEventListener("pointerdown", ()=>fireMissile());
+    window.addEventListener("keydown", (e)=>{ if(e.code==="KeyF") fireMissile(); });
 
-    // 4) 도우미
+    // 도우미
     const hitRect=(x,y,b)=> x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h;
+    function nearestBrick(fromX, fromY){
+      let best=null, bestD=1e12;
+      for(const b of bricks){
+        const cx = b.x + b.w/2, cy = b.y + b.h/2;
+        const d = (cx-fromX)**2 + (cy-fromY)**2;
+        if(d<bestD){bestD=d; best={b, cx, cy};}
+      }
+      return best;
+    }
+    function fireMissile(){
+      if(!running || paused) return;
+      const sx = paddle.x, sy = paddle.y - 20;
+      const t = nearestBrick(sx, sy);
+      const ang = t ? Math.atan2(t.cy - sy, t.cx - sx) : -Math.PI/2;
+      missiles.push({
+        x:sx, y:sy, vx:Math.cos(ang)*MISSILE.speed, vy:Math.sin(ang)*MISSILE.speed,
+        life: MISSILE.life, r: MISSILE.r
+      });
+      SFX.power();
+      burst(particles, sx, sy, "#7cf1d1", 10);
+    }
 
-    // 5) 루프
+    // 루프
     let last=performance.now();
     function frame(t){
       requestAnimationFrame(frame);
       const dt=Math.min(32,t-last); last=t;
+      const dtScaled = dt * speedScale;
 
       // 배경
       ctx.clearRect(0,0,g.w,g.h);
@@ -81,12 +126,12 @@
       if(!running){ drawDim("클릭 또는 Space로 시작"); return; }
       if(paused){ drawDim("일시정지 (P)"); return; }
 
-      // 패들 이동(부드럽게)
-      paddle.x += (paddle.target - paddle.x) * 0.25 * (dt/16);
+      // 패들 이동
+      paddle.x += (paddle.target - paddle.x) * 0.25 * (dtScaled/16);
 
       // 공 이동
-      ball.x += ball.vx*(dt/16)*ball.speed;
-      ball.y += ball.vy*(dt/16)*ball.speed;
+      ball.x += ball.vx*(dtScaled/16)*ball.speed;
+      ball.y += ball.vy*(dtScaled/16)*ball.speed;
 
       // 벽 반사
       if(ball.x<ball.r || ball.x>g.w-ball.r){ ball.vx*=-1; SFX.click(); }
@@ -111,10 +156,8 @@
       for(let i=bricks.length-1;i>=0;i--){
         const b=bricks[i];
         if(hitRect(ball.x,ball.y,b)){
-          // 반사
           const cx = clamp(ball.x, b.x, b.x+b.w), cy = clamp(ball.y, b.y, b.y+b.h);
           if(Math.abs(ball.x - cx) > Math.abs(ball.y - cy)) ball.vx *= -1; else ball.vy *= -1;
-
           b.hp--;
           if(b.hp<=0){
             bricks.splice(i,1);
@@ -131,7 +174,46 @@
       // 난이도 곡선
       ball.speed = 8 + (1 - bricks.length/(cols*rows)) * 4;
 
-      // 그리기(흔들림)
+      // === 미사일 업데이트 =====================================
+      for(let i=missiles.length-1;i>=0;i--){
+        const m = missiles[i];
+        m.life -= dtScaled;
+        if(m.life<=0){ missiles.splice(i,1); continue; }
+
+        const tObj = nearestBrick(m.x, m.y);
+        if(tObj){
+          const desired = Math.atan2(tObj.cy - m.y, tObj.cx - m.x);
+          const cur = Math.atan2(m.vy, m.vx);
+          let diff = desired - cur;
+          while(diff > Math.PI) diff -= Math.PI*2;
+          while(diff < -Math.PI) diff += Math.PI*2;
+          const turn = Math.max(-MISSILE.turn, Math.min(MISSILE.turn, diff));
+          const newA = cur + turn;
+          m.vx = Math.cos(newA)*MISSILE.speed;
+          m.vy = Math.sin(newA)*MISSILE.speed;
+        }
+        m.x += m.vx*(dtScaled/16);
+        m.y += m.vy*(dtScaled/16);
+
+        // 화면 밖
+        if(m.x<-50 || m.x>g.w+50 || m.y<-80){ missiles.splice(i,1); continue; }
+
+        // 벽돌 명중
+        for(let j=bricks.length-1;j>=0;j--){
+          const b=bricks[j];
+          if(m.x> b.x && m.x < b.x+b.w && m.y> b.y && m.y < b.y+b.h){
+            bricks.splice(j,1);
+            score += 25; ui.setScore(score,"brick-breaker");
+            SFX.boom(); shaker.add(10,200);
+            burst(particles, m.x, m.y, "#ffd166", 24);
+            missiles.splice(i,1);
+            break;
+          }
+        }
+      }
+      // ==========================================================
+
+      // 그리기
       ctx.save(); shaker.apply(ctx);
 
       // 패들
@@ -147,14 +229,22 @@
         ctx.fillRect(b.x, b.y, b.w, b.h);
       }
 
+      // 미사일
+      for(const m of missiles){
+        ctx.fillStyle="#7cf1d1";
+        ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle="rgba(124,241,209,.55)"; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(m.x - m.vx*0.6, m.y - m.vy*0.6); ctx.lineTo(m.x, m.y); ctx.stroke();
+      }
+
       // 파티클
-      drawParticles(ctx, particles, dt);
+      drawParticles(ctx, particles, dtScaled);
 
       ctx.restore();
 
-      // HUD 보조 텍스트
+      // HUD 보조
       ctx.fillStyle="#97a0d9"; ctx.font="18px system-ui";
-      ctx.fillText(`Lives: ${Math.max(0,lives)}`, g.w-110, 30);
+      ctx.fillText(\`Lives: \${Math.max(0,lives)}\`, g.w-110, 30);
 
       // 클리어 → 다음 라운드
       if(bricks.length===0){ rows=Math.min(10, rows+1); resetLevel(); resetBall(); SFX.power(); }
@@ -170,18 +260,11 @@
     function showOver(){
       ui.modal.style.display="grid";
       ui.modal.querySelector(".title").textContent="Game Over";
-      ui.modal.querySelector(".subtitle").textContent=`점수 ${score}`;
+      ui.modal.querySelector(".subtitle").textContent=\`점수 \${score}\`;
     }
 
     // 초기화
     resetLevel();
-  </script>
-
-  <!-- ✅ 서비스워커(PWA) 유지 -->
-  <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js"));
-    }
   </script>
 </body>
 </html>
