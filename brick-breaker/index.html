@@ -1,270 +1,56 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Brick Breaker (with Homing Missiles)</title>
-  <link rel="stylesheet" href="../shared/style.css?v=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>서바이벌 슈터 · 10단계</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121a33;--muted:#9bb3d1;--text:#e9f1ff;}
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif}
+    .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+      background:#0e1630;border-bottom:1px solid rgba(255,255,255,.08);padding:8px 12px}
+    .bar .pill{background:#1b254d;color:#e9f1ff;border-radius:12px;padding:6px 10px;font-size:14px}
+    .bar button{background:#2a376f;color:#fff;border:0;border-radius:12px;padding:8px 12px;font-weight:700}
+    .wrap{display:flex;flex-direction:column;height:100%}
+    #game{flex:1;display:flex;align-items:center;justify-content:center;position:relative}
+    canvas{background:#080d1d;border:1px solid rgba(255,255,255,.08);border-radius:12px;touch-action:none}
+    .help{position:absolute;left:12px;bottom:12px;background:rgba(0,0,0,.45);
+      color:#cfe3ff;padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5;max-width:min(92vw,560px)}
+    .stick{position:absolute;left:16px;bottom:16px;width:110px;height:110px;border-radius:50%;
+      border:2px solid rgba(255,255,255,.15);touch-action:none;display:none}
+    .stick .knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;
+      background:rgba(255,255,255,.18)}
+    @media (pointer:coarse){ .stick{display:block} .help{font-size:12px} }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div class="wrap">
+    <div class="bar">
+      <span class="pill">레벨 <span id="lvl">1</span>/10</span>
+      <span class="pill">남은시간 <span id="time">45</span>s</span>
+      <span class="pill">HP <span id="hp">100</span></span>
+      <span class="pill">처치 <span id="kills">0</span></span>
+      <label class="pill" style="display:flex;align-items:center;gap:6px;">
+        <input id="autofire" type="checkbox" checked /> 오토 발사
+      </label>
+      <button id="btnStart">시작/재개</button>
+      <button id="btnPause">일시정지</button>
+      <button id="btnRestart">다시 시작</button>
+    </div>
+    <div id="game">
+      <canvas id="cv" width="900" height="600"></canvas>
+      <div class="stick" id="stick"><div class="knob"></div></div>
+      <div class="help">
+        <b>조작</b><br>
+        PC: WASD/방향키 이동, 마우스 조준, 클릭 발사(오토 발사도 가능)<br>
+        모바일: 화면 좌하단 조이스틱 드래그 이동, 오토 발사 ON 권장<br>
+        <b>목표</b>: 각 레벨을 45초 동안 생존하기. 적에게 닿으면 HP 감소.
+      </div>
+    </div>
+  </div>
 
-  <script type="module">
-    import {attachUI} from "../shared/ui.js?v=1";
-    import {fitHiDPI, clamp, shaker, rint} from "../shared/utils.js?v=1";
-    import {SFX} from "../shared/sfx.js?v=1";
-    import {burst, updateAndDraw as drawParticles} from "../shared/particles.js?v=1";
-
-    // 1) 공용 UI
-    const ui = attachUI(document.getElementById("root"), {
-      title:"Brick Breaker",
-      instructions:"마우스/터치로 패들을 움직이세요. F키 또는 클릭으로 유도 미사일 발사! (P=일시정지, R=재시작)"
-    });
-    const {canvas} = ui;
-    const g = fitHiDPI(canvas, 1600, 900);
-    const ctx = g.ctx;
-
-    // === Speed control (1~5) ==================================================
-    const SPEED_MAP = {1:0.65, 2:0.85, 3:1.00, 4:1.20, 5:1.45};
-    let speedLevel = +(localStorage.getItem("gg-speed") || 3);
-    let speedScale = SPEED_MAP[speedLevel] || 1;
-
-    const panel = document.createElement("div");
-    panel.style.cssText = "position:absolute; left:12px; bottom:12px; display:flex; gap:8px; align-items:center; background:rgba(0,0,0,.35); border:1px solid #2a2f5e; border-radius:999px; padding:6px 10px; backdrop-filter:blur(6px);";
-    panel.innerHTML = \`
-      <span class="small" style="color:#97a0d9">Speed</span>
-      <select id="gg-speed" class="ui" style="padding:4px 8px; background:#11162f; border:1px solid #2a2f5e; color:#e9ecff; border-radius:8px">
-        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-        <option value="4">4</option><option value="5">5</option>
-      </select>
-    \`;
-    panel.querySelector("#gg-speed").value = String(speedLevel);
-    panel.querySelector("#gg-speed").onchange = (e)=>{
-      speedLevel = +e.target.value;
-      speedScale = SPEED_MAP[speedLevel] || 1;
-      localStorage.setItem("gg-speed", String(speedLevel));
-    };
-    ui.canvas.parentElement.appendChild(panel);
-    // ==========================================================================
-
-    // 2) 상태
-    let running=false, paused=false, score=0, lives=3;
-    const particles=[];
-    const paddle={x:g.w/2, y:g.h-40, w:200, h:18, target:g.w/2};
-    const ball={x:g.w/2, y:g.h-80, vx:4, vy:-6, r:10, speed:8};
-    let bricks=[], cols=12, rows=7, margin=12;
-
-    // 미사일
-    const missiles=[];
-    const MISSILE = { speed: 12, turn: 0.14, r: 8, life: 4000 };
-
-    function resetLevel(){
-      bricks=[];
-      const bw=(g.w - margin*2 - (cols-1)*8)/cols, bh=28;
-      for(let r=0;r<rows;r++){
-        for(let c=0;c<cols;c++){
-          bricks.push({x:margin+c*(bw+8), y:100+r*(bh+6), w:bw, h:bh, hp:1+rint(0,1)});
-        }
-      }
-    }
-    function resetBall(){
-      ball.x=g.w/2; ball.y=g.h-80; ball.vx=(Math.random()>.5?1:-1)*4; ball.vy=-6; ball.speed=8;
-    }
-    function restart(){
-      score=0; ui.setScore(0,"brick-breaker");
-      lives=3; rows=7; bricks.length=0; missiles.length=0; particles.length=0;
-      resetLevel(); resetBall();
-      running=true; paused=false;
-    }
-    ui.wireHandlers(()=>{ if(!running) restart(); }, ()=>{ paused=!paused; }, ()=>restart());
-
-    // 입력
-    canvas.addEventListener("pointermove", e=>{
-      const r = canvas.getBoundingClientRect();
-      const px = (e.clientX - r.left)/r.width * g.w;
-      paddle.target = clamp(px, paddle.w/2, g.w - paddle.w/2);
-    });
-    canvas.addEventListener("pointerdown", ()=>fireMissile());
-    window.addEventListener("keydown", (e)=>{ if(e.code==="KeyF") fireMissile(); });
-
-    // 도우미
-    const hitRect=(x,y,b)=> x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h;
-    function nearestBrick(fromX, fromY){
-      let best=null, bestD=1e12;
-      for(const b of bricks){
-        const cx = b.x + b.w/2, cy = b.y + b.h/2;
-        const d = (cx-fromX)**2 + (cy-fromY)**2;
-        if(d<bestD){bestD=d; best={b, cx, cy};}
-      }
-      return best;
-    }
-    function fireMissile(){
-      if(!running || paused) return;
-      const sx = paddle.x, sy = paddle.y - 20;
-      const t = nearestBrick(sx, sy);
-      const ang = t ? Math.atan2(t.cy - sy, t.cx - sx) : -Math.PI/2;
-      missiles.push({
-        x:sx, y:sy, vx:Math.cos(ang)*MISSILE.speed, vy:Math.sin(ang)*MISSILE.speed,
-        life: MISSILE.life, r: MISSILE.r
-      });
-      SFX.power();
-      burst(particles, sx, sy, "#7cf1d1", 10);
-    }
-
-    // 루프
-    let last=performance.now();
-    function frame(t){
-      requestAnimationFrame(frame);
-      const dt=Math.min(32,t-last); last=t;
-      const dtScaled = dt * speedScale;
-
-      // 배경
-      ctx.clearRect(0,0,g.w,g.h);
-      const grd=ctx.createLinearGradient(0,0,0,g.h); grd.addColorStop(0,"#0e1334"); grd.addColorStop(1,"#090b1f");
-      ctx.fillStyle=grd; ctx.fillRect(0,0,g.w,g.h);
-
-      if(!running){ drawDim("클릭 또는 Space로 시작"); return; }
-      if(paused){ drawDim("일시정지 (P)"); return; }
-
-      // 패들 이동
-      paddle.x += (paddle.target - paddle.x) * 0.25 * (dtScaled/16);
-
-      // 공 이동
-      ball.x += ball.vx*(dtScaled/16)*ball.speed;
-      ball.y += ball.vy*(dtScaled/16)*ball.speed;
-
-      // 벽 반사
-      if(ball.x<ball.r || ball.x>g.w-ball.r){ ball.vx*=-1; SFX.click(); }
-      if(ball.y<ball.r){ ball.vy*=-1; SFX.click(); }
-
-      // 바닥
-      if(ball.y>g.h+40){
-        lives--; shaker.add(10,200); SFX.boom(); resetBall();
-        if(lives<0){ running=false; showOver(); return; }
-      }
-
-      // 패들 충돌
-      const paddleBox={x:paddle.x-paddle.w/2,y:paddle.y-paddle.h/2,w:paddle.w,h:paddle.h};
-      if(hitRect(ball.x,ball.y,paddleBox) && ball.vy>0){
-        const t=(ball.x - paddle.x)/(paddle.w/2);
-        ball.vx = t*6;
-        ball.vy = -Math.sqrt(Math.max(4,36 - ball.vx*ball.vx));
-        SFX.hit(); burst(particles, ball.x, paddle.y-10, "#80ffea", 10);
-      }
-
-      // 벽돌 충돌
-      for(let i=bricks.length-1;i>=0;i--){
-        const b=bricks[i];
-        if(hitRect(ball.x,ball.y,b)){
-          const cx = clamp(ball.x, b.x, b.x+b.w), cy = clamp(ball.y, b.y, b.y+b.h);
-          if(Math.abs(ball.x - cx) > Math.abs(ball.y - cy)) ball.vx *= -1; else ball.vy *= -1;
-          b.hp--;
-          if(b.hp<=0){
-            bricks.splice(i,1);
-            score+=10; ui.setScore(score,"brick-breaker");
-            SFX.score(); burst(particles, ball.x, ball.y, "#ffd166", 12);
-          } else {
-            SFX.hit();
-          }
-          shaker.add(4,120);
-          break;
-        }
-      }
-
-      // 난이도 곡선
-      ball.speed = 8 + (1 - bricks.length/(cols*rows)) * 4;
-
-      // === 미사일 업데이트 =====================================
-      for(let i=missiles.length-1;i>=0;i--){
-        const m = missiles[i];
-        m.life -= dtScaled;
-        if(m.life<=0){ missiles.splice(i,1); continue; }
-
-        const tObj = nearestBrick(m.x, m.y);
-        if(tObj){
-          const desired = Math.atan2(tObj.cy - m.y, tObj.cx - m.x);
-          const cur = Math.atan2(m.vy, m.vx);
-          let diff = desired - cur;
-          while(diff > Math.PI) diff -= Math.PI*2;
-          while(diff < -Math.PI) diff += Math.PI*2;
-          const turn = Math.max(-MISSILE.turn, Math.min(MISSILE.turn, diff));
-          const newA = cur + turn;
-          m.vx = Math.cos(newA)*MISSILE.speed;
-          m.vy = Math.sin(newA)*MISSILE.speed;
-        }
-        m.x += m.vx*(dtScaled/16);
-        m.y += m.vy*(dtScaled/16);
-
-        // 화면 밖
-        if(m.x<-50 || m.x>g.w+50 || m.y<-80){ missiles.splice(i,1); continue; }
-
-        // 벽돌 명중
-        for(let j=bricks.length-1;j>=0;j--){
-          const b=bricks[j];
-          if(m.x> b.x && m.x < b.x+b.w && m.y> b.y && m.y < b.y+b.h){
-            bricks.splice(j,1);
-            score += 25; ui.setScore(score,"brick-breaker");
-            SFX.boom(); shaker.add(10,200);
-            burst(particles, m.x, m.y, "#ffd166", 24);
-            missiles.splice(i,1);
-            break;
-          }
-        }
-      }
-      // ==========================================================
-
-      // 그리기
-      ctx.save(); shaker.apply(ctx);
-
-      // 패들
-      ctx.fillStyle="#7cf1d1";
-      ctx.fillRect(paddle.x-paddle.w/2, paddle.y-paddle.h/2, paddle.w, paddle.h);
-
-      // 공
-      ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.fill();
-
-      // 벽돌
-      for(const b of bricks){
-        ctx.fillStyle = b.hp>1 ? "#a2b1ff" : "#d0d7ff";
-        ctx.fillRect(b.x, b.y, b.w, b.h);
-      }
-
-      // 미사일
-      for(const m of missiles){
-        ctx.fillStyle="#7cf1d1";
-        ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle="rgba(124,241,209,.55)"; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.moveTo(m.x - m.vx*0.6, m.y - m.vy*0.6); ctx.lineTo(m.x, m.y); ctx.stroke();
-      }
-
-      // 파티클
-      drawParticles(ctx, particles, dtScaled);
-
-      ctx.restore();
-
-      // HUD 보조
-      ctx.fillStyle="#97a0d9"; ctx.font="18px system-ui";
-      ctx.fillText(\`Lives: \${Math.max(0,lives)}\`, g.w-110, 30);
-
-      // 클리어 → 다음 라운드
-      if(bricks.length===0){ rows=Math.min(10, rows+1); resetLevel(); resetBall(); SFX.power(); }
-    }
-    requestAnimationFrame(frame);
-
-    function drawDim(text){
-      ctx.fillStyle="rgba(0,0,0,.25)"; ctx.fillRect(0,0,g.w,g.h);
-      ctx.fillStyle="#e9ecff"; ctx.font="bold 42px system-ui"; ctx.textAlign="center";
-      ctx.fillText(text, g.w/2, g.h/2);
-    }
-
-    function showOver(){
-      ui.modal.style.display="grid";
-      ui.modal.querySelector(".title").textContent="Game Over";
-      ui.modal.querySelector(".subtitle").textContent=\`점수 \${score}\`;
-    }
-
-    // 초기화
-    resetLevel();
-  </script>
+  <script src="./game.js"></script>
 </body>
 </html>
