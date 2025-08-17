@@ -3,33 +3,61 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Survival Shooter</title>
-
-  <!-- 공용 스타일 -->
-  <link rel="stylesheet" href="../shared/style.css">
-
-  <!-- (선택) PWA를 쓰고 있으면 아래 3줄 유지/수정 -->
-  <!-- <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0b1020">
-  <link rel="apple-touch-icon" href="icons/icon-192.png"> -->
+  <title>Survival Shooter (Auto-fire + Speed)</title>
+  <link rel="stylesheet" href="../shared/style.css?v=1">
 </head>
 <body>
   <div id="root"></div>
 
   <script type="module">
-    import {attachUI} from "../shared/ui.js";
-    import {fitHiDPI, clamp, rand, rint, shaker} from "../shared/utils.js";
-    import {SFX} from "../shared/sfx.js";
-    import {burst, updateAndDraw as drawParticles} from "../shared/particles.js";
+    import {attachUI} from "../shared/ui.js?v=1";
+    import {fitHiDPI, clamp, rand, rint, shaker} from "../shared/utils.js?v=1";
+    import {SFX} from "../shared/sfx.js?v=1";
+    import {burst, updateAndDraw as drawParticles} from "../shared/particles.js?v=1";
 
     // 1) 공용 UI
     const ui = attachUI(document.getElementById("root"), {
       title:"Survival Shooter",
-      instructions:"WASD/←→↑↓ 이동, 마우스/터치로 조준, 클릭/탭 발사. 웨이브를 버티며 점수를 올리세요! (P=일시정지, R=재시작)"
+      instructions:"WASD/화살표 이동, 마우스/터치 조준, 클릭/탭 발사. Auto-fire를 켜면 가장 가까운 적을 자동 조준/발사합니다! (P=일시정지, R=재시작)"
     });
     const {canvas} = ui;
     const g = fitHiDPI(canvas, 1600, 900);
     const ctx = g.ctx;
+
+    // === Speed + Auto-fire UI ================================================
+    const SPEED_MAP = {1:0.65, 2:0.85, 3:1.00, 4:1.20, 5:1.45};
+    let speedLevel = +(localStorage.getItem("gg-speed") || 3);
+    let speedScale = SPEED_MAP[speedLevel] || 1;
+
+    const panel = document.createElement("div");
+    panel.style.cssText = "position:absolute; left:12px; bottom:12px; display:flex; gap:8px; align-items:center; background:rgba(0,0,0,.35); border:1px solid #2a2f5e; border-radius:999px; padding:6px 10px; backdrop-filter:blur(6px);";
+    panel.innerHTML = \`
+      <span class="small" style="color:#97a0d9">Speed</span>
+      <select id="gg-speed" class="ui" style="padding:4px 8px; background:#11162f; border:1px solid #2a2f5e; color:#e9ecff; border-radius:8px">
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+        <option value="4">4</option><option value="5">5</option>
+      </select>
+    \`;
+    panel.querySelector("#gg-speed").value = String(speedLevel);
+    panel.querySelector("#gg-speed").onchange = (e)=>{
+      speedLevel = +e.target.value;
+      speedScale = SPEED_MAP[speedLevel] || 1;
+      localStorage.setItem("gg-speed", String(speedLevel));
+    };
+    const autoWrap = document.createElement("label");
+    autoWrap.className = "small";
+    autoWrap.style.cssText = "display:flex; gap:6px; align-items:center; margin-left:8px; color:#97a0d9";
+    autoWrap.innerHTML = \`<input id="gg-autofire" type="checkbox" checked style="width:16px;height:16px"> Auto-fire\`;
+    panel.appendChild(autoWrap);
+    ui.canvas.parentElement.appendChild(panel);
+
+    let autoFire = (localStorage.getItem("gg-autofire") ?? "1") === "1";
+    panel.querySelector("#gg-autofire").checked = autoFire;
+    panel.querySelector("#gg-autofire").onchange = (e)=>{
+      autoFire = e.target.checked;
+      localStorage.setItem("gg-autofire", autoFire ? "1" : "0");
+    };
+    // ==========================================================================
 
     // 2) 상태
     let running=false, paused=false, score=0;
@@ -40,11 +68,11 @@
     const enemies=[];
     let wave=1, spawnTimer=0;
 
-    // 3) 핸들러
+    // 핸들러
     ui.wireHandlers(
-      ()=>{ if(!running) restart(); },               // Start
-      ()=>{ paused=!paused; },                       // Toggle pause
-      ()=>restart()                                  // Restart
+      ()=>{ if(!running) restart(); },
+      ()=>{ paused=!paused; },
+      ()=>restart()
     );
 
     function restart(){
@@ -54,7 +82,7 @@
       wave=1; spawnTimer=0;
     }
 
-    // 4) 입력 (키보드)
+    // 입력
     window.addEventListener("keydown", e=>{
       const k=e.key.toLowerCase();
       if(k==="w"||e.key==="ArrowUp") input.up=true;
@@ -71,8 +99,6 @@
       if(k==="d"||e.key==="ArrowRight") input.right=false;
       if(e.code==="Space") input.shoot=false;
     });
-
-    // 5) 입력 (마우스/터치)
     canvas.addEventListener("pointermove", e=>{
       const r = canvas.getBoundingClientRect();
       input.aimX = (e.clientX - r.left)/r.width * g.w;
@@ -81,19 +107,26 @@
     canvas.addEventListener("pointerdown", ()=>{ input.shoot=true; });
     window.addEventListener("pointerup", ()=>{ input.shoot=false; });
 
-    // 6) 유틸
+    // 유틸
     function dist2(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; }
+    function nearestEnemy(){
+      let best=null, bestD=1e12;
+      for(const e of enemies){
+        const d = dist2(e.x,e.y, player.x,player.y);
+        if(d<bestD){bestD=d; best=e;}
+      }
+      return best;
+    }
 
     function spawnWave(){
-      const n = 5 + wave*2; // 웨이브마다 수 증가
+      const n = 5 + wave*2;
       for(let i=0;i<n;i++){
-        // 화면 가장자리에서 스폰
         const side = rint(0,3);
         let x,y;
-        if(side===0){ x= -40; y= rand(0,g.h);}            // left
-        else if(side===1){ x= g.w+40; y= rand(0,g.h);}    // right
-        else if(side===2){ x= rand(0,g.w); y= -40;}       // top
-        else { x= rand(0,g.w); y= g.h+40;}                // bottom
+        if(side===0){ x= -40; y= rand(0,g.h); }
+        else if(side===1){ x= g.w+40; y= rand(0,g.h); }
+        else if(side===2){ x= rand(0,g.w); y= -40; }
+        else { x= rand(0,g.w); y= g.h+40; }
         enemies.push({
           x,y, r:14, speed:2.5 + wave*0.15,
           hp: 2 + Math.floor(wave*0.4),
@@ -114,11 +147,12 @@
       burst(particles, player.x, player.y, "#7cf1d1", 8);
     }
 
-    // 7) 루프
+    // 루프
     let last=performance.now();
     function frame(t){
       requestAnimationFrame(frame);
       const dt = Math.min(32, t-last); last=t;
+      const dtScaled = dt * speedScale;
 
       // 배경
       ctx.clearRect(0,0,g.w,g.h);
@@ -128,14 +162,14 @@
       if(!running){ drawDim("클릭 또는 Space로 시작"); return; }
       if(paused){ drawDim("일시정지 (P)"); return; }
 
-      update(dt);
-      draw(dt);
+      update(dtScaled);
+      draw(dtScaled);
     }
     requestAnimationFrame(frame);
 
-    function update(dt){
-      // 플레이어 이동
-      const sp = player.speed*(dt/16);
+    function update(dtScaled){
+      // 이동
+      const sp = player.speed*(dtScaled/16);
       if(input.up) player.y -= sp;
       if(input.down) player.y += sp;
       if(input.left) player.x -= sp;
@@ -143,26 +177,36 @@
       player.x = clamp(player.x, player.r, g.w-player.r);
       player.y = clamp(player.y, player.r, g.h-player.r);
 
-      // 사격
-      player.fireCd = Math.max(0, player.fireCd - dt);
-      if(input.shoot) shoot();
+      // 사격 쿨타임
+      player.fireCd = Math.max(0, player.fireCd - dtScaled);
+
+      // 자동 조준/발사
+      if(autoFire){
+        const t = nearestEnemy();
+        if(t){
+          input.aimX = t.x; input.aimY = t.y;
+          if(player.fireCd<=0) shoot();
+        }
+      }else if(input.shoot && player.fireCd<=0){
+        shoot();
+      }
 
       // 총알
       for(let i=bullets.length-1;i>=0;i--){
         const b=bullets[i];
-        b.x += b.vx*(dt/16);
-        b.y += b.vy*(dt/16);
-        b.life -= dt;
+        b.x += b.vx*(dtScaled/16);
+        b.y += b.vy*(dtScaled/16);
+        b.life -= dtScaled;
         if(b.life<=0 || b.x<-50 || b.x>g.w+50 || b.y<-50 || b.y>g.h+50){
           bullets.splice(i,1); continue;
         }
       }
 
       // 적 스폰
-      spawnTimer -= dt;
+      spawnTimer -= dtScaled;
       if(spawnTimer<=0){
         spawnWave();
-        spawnTimer = Math.max(3500 - wave*120, 1400); // 웨이브가 오를수록 빨라짐
+        spawnTimer = Math.max(3500 - wave*120, 1400);
         wave++;
       }
 
@@ -171,12 +215,12 @@
         const e=enemies[i];
         const dx = player.x - e.x, dy = player.y - e.y;
         const len = Math.max(1, Math.hypot(dx,dy));
-        e.x += (dx/len) * e.speed*(dt/16);
-        e.y += (dy/len) * e.speed*(dt/16);
+        e.x += (dx/len) * e.speed*(dtScaled/16);
+        e.y += (dy/len) * e.speed*(dtScaled/16);
 
-        // 플레이어와 충돌
-        const dd = dist2(e.x,e.y, player.x,player.y);
-        if(dd < (e.r+player.r)*(e.r+player.r)){
+        // 플레이어 충돌
+        const rr = (e.r+player.r); const rr2 = rr*rr;
+        if((e.x-player.x)**2 + (e.y-player.y)**2 < rr2){
           player.hp -= 10; shaker.add(8,160); SFX.hit();
           burst(particles, player.x, player.y, "#ffd166", 12);
           enemies.splice(i,1);
@@ -184,10 +228,11 @@
           continue;
         }
 
-        // 총알과 충돌
+        // 총알 충돌
         for(let j=bullets.length-1;j>=0;j--){
           const b=bullets[j];
-          if(dist2(e.x,e.y,b.x,b.y) < (e.r+b.r)*(e.r+b.r)){
+          const rsum = e.r + b.r; const r2 = rsum*rsum;
+          if((e.x-b.x)**2 + (e.y-b.y)**2 < r2){
             e.hp -= 1; bullets.splice(j,1);
             SFX.hit(); burst(particles, e.x, e.y, "#ffed85", 10);
             if(e.hp<=0){
@@ -201,14 +246,14 @@
       }
     }
 
-    function draw(dt){
+    function draw(dtScaled){
       ctx.save(); shaker.apply(ctx);
 
       // 플레이어
       ctx.fillStyle="#7cf1d1";
       ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
 
-      // 총구 표시(조준 방향)
+      // 총구 표시
       ctx.strokeStyle="#7cf1d1"; ctx.lineWidth=2;
       const dx = input.aimX-player.x, dy=input.aimY-player.y;
       const len = Math.max(1, Math.hypot(dx,dy));
@@ -226,17 +271,17 @@
       }
 
       // 파티클
-      drawParticles(ctx, particles, dt);
+      drawParticles(ctx, particles, dtScaled);
 
       ctx.restore();
 
-      // HP 바 & 힌트
+      // HP 바
       const hpW = 220, hpH = 12, x = 20, y = 20;
       ctx.fillStyle="rgba(0,0,0,.35)"; ctx.fillRect(x-4,y-4,hpW+8,hpH+8);
       ctx.fillStyle="#2a365f"; ctx.fillRect(x,y,hpW,hpH);
       ctx.fillStyle="#8be28b"; ctx.fillRect(x,y, Math.max(0, hpW*(player.hp/100)), hpH);
       ctx.fillStyle="#97a0d9"; ctx.font="16px system-ui";
-      ctx.fillText(`HP ${Math.max(0,player.hp)}%`, x, y+hpH+20);
+      ctx.fillText(\`HP \${Math.max(0,player.hp)}%\`, x, y+hpH+20);
     }
 
     function drawDim(text){
@@ -246,19 +291,11 @@
     }
 
     function gameOver(){
-      running=false;
+      paused=false; running=false;
       ui.modal.style.display="grid";
       ui.modal.querySelector(".title").textContent="Game Over";
-      ui.modal.querySelector(".subtitle").textContent=`점수 ${score}`;
+      ui.modal.querySelector(".subtitle").textContent=\`점수 \${score}\`;
     }
-
   </script>
-
-  <!-- (선택) PWA를 쓰면 서비스워커 등록 유지 -->
-  <!-- <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js"));
-    }
-  </script> -->
 </body>
 </html>
