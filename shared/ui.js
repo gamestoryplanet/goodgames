@@ -28,6 +28,7 @@ export function attachUI(root, {title, instructions}){
       </div>
     </div>
   `;
+
   const el = {
     canvas: root.querySelector("#game"),
     score: root.querySelector("#score"),
@@ -38,11 +39,12 @@ export function attachUI(root, {title, instructions}){
     startKb: root.querySelector("#start-kb"),
     startTouch: root.querySelector("#start-touch"),
   };
+
   const hideModal=()=>el.modal.style.display="none";
-  el.startKb.onclick = el.startTouch.onclick = ()=>{resumeAudio(); hideModal(); onStart?.()};
+  el.startKb.onclick = el.startTouch.onclick = ()=>{ resumeAudio(); hideModal(); onStart?.(); };
   el.pause.onclick = ()=>onTogglePause?.();
   el.restart.onclick = ()=>onRestart?.();
-  // Keyboard
+
   const keys=new Set();
   window.addEventListener("keydown",e=>{
     if(e.code==="Space"){resumeAudio(); hideModal(); onStart?.(); return;}
@@ -51,11 +53,17 @@ export function attachUI(root, {title, instructions}){
     keys.add(e.code);
   });
   window.addEventListener("keyup",e=>keys.delete(e.code));
+
   let onStart, onTogglePause, onRestart;
   return {
     ...el, keys,
-    setScore:(v,titleKey)=>{el.score.textContent=`Score ${v}`; if(titleKey){const best=store.get(titleKey+"-best",0); if(v>best){store.set(titleKey+"-best", v); el.best.textContent=`Best ${v}`;}}},
-    wireHandlers:(a,b,c)=>{onStart=a; onTogglePause=b; onRestart=c;}
+    setScore:(v,titleKey)=>{
+      el.score.textContent=`Score ${v}`;
+      if(titleKey){
+        const best=store.get(titleKey+"-best",0);
+        if(v>best){ store.set(titleKey+"-best", v); el.best.textContent=`Best ${v}`; }
+      }
+    },
+    wireHandlers:(a,b,c)=>{ onStart=a; onTogglePause=b; onRestart=c; }
   };
 }
-
