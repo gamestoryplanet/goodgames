@@ -1,56 +1,264 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <title>서바이벌 슈터 · 10단계</title>
-  <style>
-    :root{--bg:#0b1020;--panel:#121a33;--muted:#9bb3d1;--text:#e9f1ff;}
-    *{box-sizing:border-box}
-    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans KR",sans-serif}
-    .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
-      background:#0e1630;border-bottom:1px solid rgba(255,255,255,.08);padding:8px 12px}
-    .bar .pill{background:#1b254d;color:#e9f1ff;border-radius:12px;padding:6px 10px;font-size:14px}
-    .bar button{background:#2a376f;color:#fff;border:0;border-radius:12px;padding:8px 12px;font-weight:700}
-    .wrap{display:flex;flex-direction:column;height:100%}
-    #game{flex:1;display:flex;align-items:center;justify-content:center;position:relative}
-    canvas{background:#080d1d;border:1px solid rgba(255,255,255,.08);border-radius:12px;touch-action:none}
-    .help{position:absolute;left:12px;bottom:12px;background:rgba(0,0,0,.45);
-      color:#cfe3ff;padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5;max-width:min(92vw,560px)}
-    .stick{position:absolute;left:16px;bottom:16px;width:110px;height:110px;border-radius:50%;
-      border:2px solid rgba(255,255,255,.15);touch-action:none;display:none}
-    .stick .knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;
-      background:rgba(255,255,255,.18)}
-    @media (pointer:coarse){ .stick{display:block} .help{font-size:12px} }
-  </style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Survival Shooter</title>
+
+  <!-- 공용 스타일 -->
+  <link rel="stylesheet" href="../shared/style.css">
+
+  <!-- (선택) PWA를 쓰고 있으면 아래 3줄 유지/수정 -->
+  <!-- <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b1020">
+  <link rel="apple-touch-icon" href="icons/icon-192.png"> -->
 </head>
 <body>
-  <div class="wrap">
-    <div class="bar">
-      <span class="pill">레벨 <span id="lvl">1</span>/10</span>
-      <span class="pill">남은시간 <span id="time">45</span>s</span>
-      <span class="pill">HP <span id="hp">100</span></span>
-      <span class="pill">처치 <span id="kills">0</span></span>
-      <label class="pill" style="display:flex;align-items:center;gap:6px;">
-        <input id="autofire" type="checkbox" checked /> 오토 발사
-      </label>
-      <button id="btnStart">시작/재개</button>
-      <button id="btnPause">일시정지</button>
-      <button id="btnRestart">다시 시작</button>
-    </div>
-    <div id="game">
-      <canvas id="cv" width="900" height="600"></canvas>
-      <div class="stick" id="stick"><div class="knob"></div></div>
-      <div class="help">
-        <b>조작</b><br>
-        PC: WASD/방향키 이동, 마우스 조준, 클릭 발사(오토 발사도 가능)<br>
-        모바일: 화면 좌하단 조이스틱 드래그 이동, 오토 발사 ON 권장<br>
-        <b>목표</b>: 각 레벨을 45초 동안 생존하기. 적에게 닿으면 HP 감소.
-      </div>
-    </div>
-  </div>
+  <div id="root"></div>
 
-  <script src="./game.js"></script>
+  <script type="module">
+    import {attachUI} from "../shared/ui.js";
+    import {fitHiDPI, clamp, rand, rint, shaker} from "../shared/utils.js";
+    import {SFX} from "../shared/sfx.js";
+    import {burst, updateAndDraw as drawParticles} from "../shared/particles.js";
+
+    // 1) 공용 UI
+    const ui = attachUI(document.getElementById("root"), {
+      title:"Survival Shooter",
+      instructions:"WASD/←→↑↓ 이동, 마우스/터치로 조준, 클릭/탭 발사. 웨이브를 버티며 점수를 올리세요! (P=일시정지, R=재시작)"
+    });
+    const {canvas} = ui;
+    const g = fitHiDPI(canvas, 1600, 900);
+    const ctx = g.ctx;
+
+    // 2) 상태
+    let running=false, paused=false, score=0;
+    const particles=[];
+    const input = {up:false,down:false,left:false,right:false,shoot:false, aimX:g.w/2, aimY:g.h/2};
+    const player = {x:g.w/2, y:g.h/2, r:16, speed:6, hp:100, fireCd:0};
+    const bullets=[];
+    const enemies=[];
+    let wave=1, spawnTimer=0;
+
+    // 3) 핸들러
+    ui.wireHandlers(
+      ()=>{ if(!running) restart(); },               // Start
+      ()=>{ paused=!paused; },                       // Toggle pause
+      ()=>restart()                                  // Restart
+    );
+
+    function restart(){
+      running=true; paused=false; score=0; ui.setScore(0,"survival-shooter");
+      particles.length=0; bullets.length=0; enemies.length=0;
+      player.x=g.w/2; player.y=g.h/2; player.hp=100; player.fireCd=0;
+      wave=1; spawnTimer=0;
+    }
+
+    // 4) 입력 (키보드)
+    window.addEventListener("keydown", e=>{
+      const k=e.key.toLowerCase();
+      if(k==="w"||e.key==="ArrowUp") input.up=true;
+      if(k==="s"||e.key==="ArrowDown") input.down=true;
+      if(k==="a"||e.key==="ArrowLeft") input.left=true;
+      if(k==="d"||e.key==="ArrowRight") input.right=true;
+      if(e.code==="Space") input.shoot=true;
+    });
+    window.addEventListener("keyup", e=>{
+      const k=e.key.toLowerCase();
+      if(k==="w"||e.key==="ArrowUp") input.up=false;
+      if(k==="s"||e.key==="ArrowDown") input.down=false;
+      if(k==="a"||e.key==="ArrowLeft") input.left=false;
+      if(k==="d"||e.key==="ArrowRight") input.right=false;
+      if(e.code==="Space") input.shoot=false;
+    });
+
+    // 5) 입력 (마우스/터치)
+    canvas.addEventListener("pointermove", e=>{
+      const r = canvas.getBoundingClientRect();
+      input.aimX = (e.clientX - r.left)/r.width * g.w;
+      input.aimY = (e.clientY - r.top)/r.height * g.h;
+    });
+    canvas.addEventListener("pointerdown", ()=>{ input.shoot=true; });
+    window.addEventListener("pointerup", ()=>{ input.shoot=false; });
+
+    // 6) 유틸
+    function dist2(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; }
+
+    function spawnWave(){
+      const n = 5 + wave*2; // 웨이브마다 수 증가
+      for(let i=0;i<n;i++){
+        // 화면 가장자리에서 스폰
+        const side = rint(0,3);
+        let x,y;
+        if(side===0){ x= -40; y= rand(0,g.h);}            // left
+        else if(side===1){ x= g.w+40; y= rand(0,g.h);}    // right
+        else if(side===2){ x= rand(0,g.w); y= -40;}       // top
+        else { x= rand(0,g.w); y= g.h+40;}                // bottom
+        enemies.push({
+          x,y, r:14, speed:2.5 + wave*0.15,
+          hp: 2 + Math.floor(wave*0.4),
+          color: "#ff9aa2"
+        });
+      }
+      SFX.power();
+    }
+
+    function shoot(){
+      if(player.fireCd>0) return;
+      player.fireCd = 120; // ms
+      const dx = input.aimX - player.x, dy = input.aimY - player.y;
+      const len = Math.max(1, Math.hypot(dx,dy));
+      const vx = dx/len * 14, vy = dy/len * 14;
+      bullets.push({x:player.x, y:player.y, vx, vy, r:6, life:1200});
+      SFX.click();
+      burst(particles, player.x, player.y, "#7cf1d1", 8);
+    }
+
+    // 7) 루프
+    let last=performance.now();
+    function frame(t){
+      requestAnimationFrame(frame);
+      const dt = Math.min(32, t-last); last=t;
+
+      // 배경
+      ctx.clearRect(0,0,g.w,g.h);
+      const grd=ctx.createLinearGradient(0,0,0,g.h); grd.addColorStop(0,"#0e1334"); grd.addColorStop(1,"#090b1f");
+      ctx.fillStyle=grd; ctx.fillRect(0,0,g.w,g.h);
+
+      if(!running){ drawDim("클릭 또는 Space로 시작"); return; }
+      if(paused){ drawDim("일시정지 (P)"); return; }
+
+      update(dt);
+      draw(dt);
+    }
+    requestAnimationFrame(frame);
+
+    function update(dt){
+      // 플레이어 이동
+      const sp = player.speed*(dt/16);
+      if(input.up) player.y -= sp;
+      if(input.down) player.y += sp;
+      if(input.left) player.x -= sp;
+      if(input.right) player.x += sp;
+      player.x = clamp(player.x, player.r, g.w-player.r);
+      player.y = clamp(player.y, player.r, g.h-player.r);
+
+      // 사격
+      player.fireCd = Math.max(0, player.fireCd - dt);
+      if(input.shoot) shoot();
+
+      // 총알
+      for(let i=bullets.length-1;i>=0;i--){
+        const b=bullets[i];
+        b.x += b.vx*(dt/16);
+        b.y += b.vy*(dt/16);
+        b.life -= dt;
+        if(b.life<=0 || b.x<-50 || b.x>g.w+50 || b.y<-50 || b.y>g.h+50){
+          bullets.splice(i,1); continue;
+        }
+      }
+
+      // 적 스폰
+      spawnTimer -= dt;
+      if(spawnTimer<=0){
+        spawnWave();
+        spawnTimer = Math.max(3500 - wave*120, 1400); // 웨이브가 오를수록 빨라짐
+        wave++;
+      }
+
+      // 적 이동 & 충돌
+      for(let i=enemies.length-1;i>=0;i--){
+        const e=enemies[i];
+        const dx = player.x - e.x, dy = player.y - e.y;
+        const len = Math.max(1, Math.hypot(dx,dy));
+        e.x += (dx/len) * e.speed*(dt/16);
+        e.y += (dy/len) * e.speed*(dt/16);
+
+        // 플레이어와 충돌
+        const dd = dist2(e.x,e.y, player.x,player.y);
+        if(dd < (e.r+player.r)*(e.r+player.r)){
+          player.hp -= 10; shaker.add(8,160); SFX.hit();
+          burst(particles, player.x, player.y, "#ffd166", 12);
+          enemies.splice(i,1);
+          if(player.hp<=0){ gameOver(); return; }
+          continue;
+        }
+
+        // 총알과 충돌
+        for(let j=bullets.length-1;j>=0;j--){
+          const b=bullets[j];
+          if(dist2(e.x,e.y,b.x,b.y) < (e.r+b.r)*(e.r+b.r)){
+            e.hp -= 1; bullets.splice(j,1);
+            SFX.hit(); burst(particles, e.x, e.y, "#ffed85", 10);
+            if(e.hp<=0){
+              enemies.splice(i,1);
+              score += 5; ui.setScore(score,"survival-shooter");
+              SFX.score(); burst(particles, e.x, e.y, "#ff9aa2", 16);
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    function draw(dt){
+      ctx.save(); shaker.apply(ctx);
+
+      // 플레이어
+      ctx.fillStyle="#7cf1d1";
+      ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
+
+      // 총구 표시(조준 방향)
+      ctx.strokeStyle="#7cf1d1"; ctx.lineWidth=2;
+      const dx = input.aimX-player.x, dy=input.aimY-player.y;
+      const len = Math.max(1, Math.hypot(dx,dy));
+      ctx.beginPath(); ctx.moveTo(player.x, player.y);
+      ctx.lineTo(player.x + dx/len*(player.r+12), player.y + dy/len*(player.r+12)); ctx.stroke();
+
+      // 총알
+      ctx.fillStyle="#ffffff";
+      for(const b of bullets){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill(); }
+
+      // 적
+      for(const e of enemies){
+        ctx.fillStyle=e.color;
+        ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fill();
+      }
+
+      // 파티클
+      drawParticles(ctx, particles, dt);
+
+      ctx.restore();
+
+      // HP 바 & 힌트
+      const hpW = 220, hpH = 12, x = 20, y = 20;
+      ctx.fillStyle="rgba(0,0,0,.35)"; ctx.fillRect(x-4,y-4,hpW+8,hpH+8);
+      ctx.fillStyle="#2a365f"; ctx.fillRect(x,y,hpW,hpH);
+      ctx.fillStyle="#8be28b"; ctx.fillRect(x,y, Math.max(0, hpW*(player.hp/100)), hpH);
+      ctx.fillStyle="#97a0d9"; ctx.font="16px system-ui";
+      ctx.fillText(`HP ${Math.max(0,player.hp)}%`, x, y+hpH+20);
+    }
+
+    function drawDim(text){
+      ctx.fillStyle="rgba(0,0,0,.25)"; ctx.fillRect(0,0,g.w,g.h);
+      ctx.fillStyle="#e9ecff"; ctx.font="bold 42px system-ui"; ctx.textAlign="center";
+      ctx.fillText(text, g.w/2, g.h/2);
+    }
+
+    function gameOver(){
+      running=false;
+      ui.modal.style.display="grid";
+      ui.modal.querySelector(".title").textContent="Game Over";
+      ui.modal.querySelector(".subtitle").textContent=`점수 ${score}`;
+    }
+
+  </script>
+
+  <!-- (선택) PWA를 쓰면 서비스워커 등록 유지 -->
+  <!-- <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js"));
+    }
+  </script> -->
 </body>
 </html>
